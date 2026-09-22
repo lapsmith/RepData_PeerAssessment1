@@ -6,20 +6,133 @@ output:
 ---
 
 
-## Loading and preprocessing the data
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.path = "figure/")
+```
 
+## 1. Load the data
+```{r load-data}
+activity <- read.csv("activity.csv")
+```
 
-## What is mean total number of steps taken per day?
+## 2. Process/transform the data
+```{r process-data}
+activity$date <- as.Date(activity$date, format = "%Y-%m-%d")
+str(activity)
+```
 
+```{r load-libraries, message=FALSE, warning=FALSE}
+library(dplyr)
+```
 
+### Steps Taken Per Day
+```{r steps-per-day}
+steps_per_day <- activity %>%
+  filter(!is.na(steps)) %>%
+  group_by(date) %>%
+  summarize(total_steps = sum(steps))
 
-## What is the average daily activity pattern?
+head(steps_per_day)
+```
 
+```{r histogram-steps}
+hist(steps_per_day$total_steps, 
+     breaks = 20, 
+     col = "steelblue", 
+     main = "Histogram of Total Number of Steps Taken Per Day", 
+     xlab = "Total Steps Per Day", 
+     ylab = "Frequency")
+```
 
+```{r calculate-mean-median}
+mean_steps <- mean(steps_per_day$total_steps)
+median_steps <- median(steps_per_day$total_steps)
 
-## Imputing missing values
+mean_steps
+median_steps
+```
 
+### Average Daily Activity Pattern
+```{r avg-daily-pattern}
+avg_steps_interval <- activity %>%
+  filter(!is.na(steps)) %>%
+  group_by(interval) %>%
+  summarize(mean_steps = mean(steps))
 
+plot(avg_steps_interval$interval, avg_steps_interval$mean_steps,
+     type = "l", 
+     col = "darkgreen", 
+     lwd = 2,
+     main = "Average Daily Activity Pattern", 
+     xlab = "5-Minute Interval", 
+     ylab = "Average Number of Steps Taken")
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+```{r max-interval}
+max_interval_row <- avg_steps_interval %>%
+  filter(mean_steps == max(mean_steps))
+
+max_interval_row
+```
+
+### Imputing Missing Values
+```{r count-nas}
+total_nas <- sum(is.na(activity$steps))
+total_nas
+```
+
+```{r impute-data}
+activity_imputed <- activity %>%
+  left_join(avg_steps_interval, by = "interval") %>%
+  mutate(steps = ifelse(is.na(steps), mean_steps, steps)) %>%
+  select(-mean_steps)
+
+sum(is.na(activity_imputed$steps))
+```
+
+```{r steps-per-day-imputed}
+steps_per_day_imputed <- activity_imputed %>%
+  group_by(date) %>%
+  summarize(total_steps = sum(steps))
+
+hist(steps_per_day_imputed$total_steps, 
+     breaks = 20, 
+     col = "coral", 
+     main = "Histogram of Total Number of Steps Per Day (Imputed Data)", 
+     xlab = "Total Steps Per Day", 
+     ylab = "Frequency")
+```
+
+```{r mean-median-imputed}
+mean_steps_imp <- mean(steps_per_day_imputed$total_steps)
+median_steps_imp <- median(steps_per_day_imputed$total_steps)
+
+mean_steps_imp
+median_steps_imp
+```
+
+### Weekdays vs. Weekends
+```{r weekday-weekend-split}
+activity_imputed <- activity_imputed %>%
+  mutate(day_type = as.factor(ifelse(weekdays(date) %in% c("Saturday", "Sunday"), "weekend", "weekday")))
+
+table(activity_imputed$day_type)
+```
+
+```{r load-lattice, message=FALSE, warning=FALSE}
+library(lattice)
+```
+
+```{r panel-plot}
+avg_steps_by_day_type <- activity_imputed %>%
+  group_by(interval, day_type) %>%
+  summarize(mean_steps = mean(steps), .groups = 'drop')
+
+xyplot(mean_steps ~ interval | day_type, data = avg_steps_by_day_type, 
+       type = "l", 
+       layout = c(1, 2), 
+       main = "Average Number of Steps Taken by 5-Minute Interval (Weekday vs. Weekend)",
+       xlab = "5-Minute Interval", 
+       ylab = "Number of Steps")
+```
